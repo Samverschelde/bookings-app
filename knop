@@ -1,0 +1,12 @@
+{
+  "mimeTypes": {
+    ".png": "image/png",
+    ".xml": "application/xml",
+    ".html": "text/html",
+    ".json": "application/json"
+  },
+  "globalHeaders": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*"
+  }
+}
