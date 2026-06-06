@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bookings Mail Assistent</title>
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;min-height:100vh}
+    .container{max-width:720px;margin:0 auto;padding:2rem 1rem}
+    h1{font-size:22px;font-weight:600;margin-bottom:4px}
+    .subtitle{font-size:14px;color:#666;margin-bottom:2rem}
+    .nav-steps{display:flex;gap:8px;margin-bottom:2rem;flex-wrap:wrap}
+    .nav-step{font-size:12px;padding:4px 14px;border-radius:999px;border:1px solid #ddd;color:#888;background:#fff}
+    .nav-step.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+    .nav-step.done{border-color:#16a34a;color:#16a34a}
+    .step{display:none}.step.active{display:block}
+    .card{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:1.25rem;margin-bottom:1rem}
+    .section-title{font-size:15px;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:8px;color:#1a1a1a}
+    .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+    .field-full{margin-bottom:12px}
+    .field-group{display:flex;flex-direction:column;gap:4px;position:relative}
+    .field-group label{font-size:13px;color:#555}
+    .field-group input,.field-group textarea,.field-group select{width:100%;padding:8px 10px;font-size:14px;border:1px solid #ddd;border-radius:8px;background:#fafafa;color:#1a1a1a;font-family:inherit;transition:border 0.15s}
+    .field-group input:focus,.field-group textarea:focus{outline:none;border-color:#888;background:#fff}
+    .field-group textarea{resize:vertical;min-height:70px}
+    .field-group input[readonly]{background:#f0f0f0;color:#888;cursor:not-allowed}
+    .btn{padding:9px 20px;border-radius:8px;font-size:14px;cursor:pointer;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-family:inherit;transition:background 0.15s;display:inline-flex;align-items:center;gap:6px}
+    .btn:hover{background:#f5f5f5}.btn:disabled{opacity:.45;cursor:not-allowed}
+    .btn-primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}.btn-primary:hover{background:#333}
+    .btn-row{display:flex;gap:8px;margin-top:1rem;align-items:center;flex-wrap:wrap}
+    .status-bar{font-size:13px;color:#666;display:flex;align-items:center;gap:6px}
+    .spinner{width:14px;height:14px;border:2px solid #ddd;border-top-color:#1a1a1a;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .alert{border-radius:8px;padding:.875rem 1rem;font-size:14px;margin-top:.75rem}
+    .alert-warning{border:1px solid #f59e0b;background:#fffbeb;color:#92400e}
+    .alert-danger{border:1px solid #f87171;background:#fef2f2;color:#991b1b}
+    .alert-success{border:1px solid #4ade80;background:#f0fdf4;color:#166534}
+    .divider{border:none;border-top:1px solid #e5e5e5;margin:1rem 0}
+    .mail-item{padding:.75rem 1rem;border:1px solid #e5e5e5;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s}
+    .mail-item:hover{background:#f9f9f9}.mail-item.selected{border-color:#3b82f6;background:#eff6ff}
+    .mail-from{font-size:14px;font-weight:600;color:#1a1a1a}
+    .mail-subject{font-size:13px;color:#555;margin-top:2px}
+    .mail-date{font-size:12px;color:#999;margin-top:2px}
+    .login-center{display:flex;flex-direction:column;align-items:center;text-align:center;padding:3rem 1rem;gap:1rem}
+    .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .summary-cell{background:#f9f9f9;border:1px solid #e5e5e5;border-radius:8px;padding:.75rem}
+    .summary-cell.full{grid-column:span 2}
+    .summary-label{font-size:12px;color:#888;margin-bottom:2px}
+    .summary-value{font-size:14px;font-weight:600;color:#1a1a1a}
+    .email-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem}
+    .badge{font-size:12px;padding:3px 10px;border-radius:999px;display:inline-block;margin-top:5px;font-weight:500}
+    .badge-green{background:#f0fdf4;color:#166534;border:1px solid #4ade80}
+    .badge-blue{background:#eff6ff;color:#1e40af;border:1px solid #93c5fd}
+    .ac-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;z-index:100;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1);margin-top:2px}
+    .ac-item{padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f0f0}
+    .ac-item:hover{background:#f5f5f5}
+    @media(max-width:500px){.field-row,.summary-grid{grid-template-columns:1fr}.summary-cell.full{grid-column:span 1}}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📬 Bookings Mail Assistent</h1>
+  <p class="subtitle">Lees e-mails uit Outlook, laat AI de boekingsvelden invullen, controleer en bevestig.</p>
+  <div class="nav-steps">
+    <div class="nav-step active" id="nav1">1 · Inloggen</div>
+    <div class="nav-step" id="nav2">2 · E-mail kiezen</div>
+    <div class="nav-step" id="nav3">3 · Verificatie</div>
+    <div class="nav-step" id="nav4">4 · Bevestiging</div>
+  </div>
+
+  <!-- STAP 1 -->
+  <div class="step active" id="step1">
+    <div class="card">
+      <div class="login-center">
+        <div style="font-size:56px">🪟</div>
+        <div><p style="font-size:16px;font-weight:600;margin-bottom:6px">Aanmelden met Microsoft</p><p style="font-size:14px;color:#666">Log in om je Outlook-mails te lezen<br>en afspraken aan te maken in Bookings.</p></div>
+        <button class="btn btn-primary" id="loginBtn" onclick="loginMicrosoft()" disabled>Aanmelden met Microsoft</button>
+        <div id="loginStatus" class="status-bar"><div class="spinner"></div> App wordt geladen...</div>
+        <div id="loginError" style="display:none" class="alert alert-danger"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STAP 2 -->
+  <div class="step" id="step2">
+    <div class="card">
+      <div class="email-header">
+        <div class="section-title" style="margin:0">📥 Recente e-mails</div>
+        <button class="btn" onclick="loadEmails()" style="font-size:12px;padding:5px 12px">↻ Vernieuwen</button>
+      </div>
+      <div id="emailList"><div class="status-bar"><div class="spinner"></div> E-mails laden...</div></div>
+      <div id="emailError" style="display:none" class="alert alert-danger"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeSelected()" disabled>✨ Analyseer geselecteerde mail</button>
+      <div class="status-bar" id="status2" style="display:none"><div class="spinner"></div> AI analyseert e-mail...</div>
+    </div>
+  </div>
+
+  <!-- STAP 3 -->
+  <div class="step" id="step3">
+    <div class="card">
+      <div class="section-title">👤 Klantgegevens</div>
+      <div class="field-row">
+        <div class="field-group"><label>Voornaam</label><input type="text" id="firstName"/></div>
+        <div class="field-group"><label>Achternaam</label><input type="text" id="lastName"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label>E-mailadres klant</label>
+          <input type="email" id="clientEmail" oninput="clearCustomerBadge()"/>
+          <div id="customerBadge"></div>
+        </div>
+        <div class="field-group"><label>Telefoonnummer klant</label><input type="tel" id="clientPhone"/></div>
+      </div>
+      <div class="field-full"><div class="field-group"><label>Adres klant</label><input type="text" id="clientAddress" oninput="document.getElementById('location').value=this.value"/></div></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">📅 Afspraakdetails</div>
+      <div class="field-row">
+        <div class="field-group"><label>Datum</label><input type="date" id="bookingDate" onchange="onDateOrTimeChange()"/></div>
+        <div class="field-group"><label>Starttijd</label><input type="time" id="bookingTime" onchange="onDateOrTimeChange()"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label>Eindtijd</label><input type="time" id="bookingEndTime" onchange="onDateOrTimeChange()"/></div>
+        <div class="field-group"><label>Duurtijd</label><input type="text" id="durationDisplay" readonly/></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label>Dienst / service</label>
+          <div style="display:flex;gap:0;position:relative;">
+            <input type="text" id="serviceType" autocomplete="off" placeholder="Typ om te zoeken..." oninput="filterServices(this.value)" onfocus="showAllServices()" style="border-radius:8px 0 0 8px;border-right:none;"/>
+            <button type="button" onclick="showAllServices()" style="padding:8px 10px;border:1px solid #ddd;border-radius:0 8px 8px 0;background:#f5f5f5;cursor:pointer;font-size:12px;">▼</button>
+          </div>
+          <div class="ac-dropdown" id="serviceDropdown" style="top:38px;"></div>
+        </div>
+        <div class="field-group"><label>Locatie</label><input type="text" id="location"/></div>
+      </div>
+      <div class="field-full">
+        <div class="field-group">
+          <label>Medewerker</label>
+          <input type="text" id="staffMember" autocomplete="off" placeholder="Wordt automatisch ingevuld..." oninput="filterStaff(this.value)" onfocus="filterStaff(this.value)"/>
+          <div class="ac-dropdown" id="staffDropdown"></div>
+          <div id="staffStatus" style="font-size:12px;color:#666;margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">📋 Extra informatie</div>
+      <div class="field-full"><div class="field-group"><label>Naam + gsm contactpersoon</label><input type="text" id="contactPerson"/></div></div>
+      <div class="field-row">
+        <div class="field-group"><label>Bestelbonnummer</label><input type="text" id="orderNumber"/></div>
+        <div class="field-group"><label>Aantal deelnemers</label><input type="number" id="participants" min="1"/></div>
+      </div>
+      <div class="field-full"><div class="field-group"><label>Opmerkingen</label><textarea id="notes" rows="3"></textarea></div></div>
+    </div>
+
+    <div class="alert alert-warning">⚠️ Controleer alle velden zorgvuldig voor je verder gaat.</div>
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(2)">← Terug</button>
+      <button class="btn btn-primary" onclick="goConfirm()">✓ Bevestig & ga naar overzicht</button>
+    </div>
+  </div>
+
+  <!-- STAP 4 -->
+  <div class="step" id="step4">
+    <div class="card" id="confirmCard">
+      <div class="section-title">📋 Boeking bevestigen</div>
+      <p style="font-size:14px;color:#666;margin-bottom:1rem">Controleer het overzicht. Pas na jouw expliciete bevestiging wordt de afspraak aangemaakt.</p>
+      <div id="summaryContent" class="summary-grid"></div>
+      <hr class="divider">
+      <div class="alert alert-warning">⚠️ Na bevestiging wordt de afspraak <strong>definitief aangemaakt</strong> als voorstel in Microsoft Bookings.</div>
+      <div class="btn-row">
+        <button class="btn" onclick="goStep(3)">← Terug aanpassen</button>
+        <button class="btn btn-primary" onclick="bookAppointment()" id="bookBtn">📆 Bevestig boeking</button>
+        <div class="status-bar" id="status4" style="display:none"><div class="spinner"></div> Aanmaken in Bookings...</div>
+      </div>
+      <div id="bookError" style="display:none" class="alert alert-danger"></div>
+    </div>
+    <div id="successMsg" style="display:none">
+      <div class="alert alert-success" style="font-size:15px">✅ <strong>Boeking aangemaakt!</strong> De afspraak staat nu als voorstel in Microsoft Bookings.</div>
+      <div class="btn-row" style="margin-top:1rem"><button class="btn btn-primary" onclick="goStep(2)">+ Nieuwe boeking</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID = '5f30ad42-e520-41a2-9f48-5dc1d5f961c4';
+const TENANT_ID = '0cfe6e5e-f690-443a-857f-7b5b22415fca';
+const SCOPES = ['Mail.Read','BookingsAppointment.ReadWrite.All','Calendars.ReadWrite'];
+const REDIRECT_URI = 'https://wonderful-rock-0283f0310.7.azurestaticapps.net/bookings-mail-assistent.html';
+const BLOCKED_STAFF = ['sam verschelde'];
+const BOOKINGS_ADDRESS = 'Vormingen@alert-opleidingen.be';
+
+let msalInstance=null, selectedEmail=null, bookingServices=[], bookingStaff=[], bookingBusinessId=null, existingCustomerId=null, selectedStaffId=null;
+window._emails=[];
+
+function goStep(n){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.getElementById('step'+n).classList.add('active');
+  for(let i=1;i<=4;i++){
+    const nav=document.getElementById('nav'+i);
+    nav.classList.remove('active','done');
+    if(i<n)nav.classList.add('done');
+    else if(i===n)nav.classList.add('active');
+  }
+}
+
+async function initMsal(){
+  try{
+    msalInstance=new msal.PublicClientApplication({
+      auth:{clientId:CLIENT_ID,authority:`https://login.microsoftonline.com/${TENANT_ID}`,redirectUri:REDIRECT_URI},
+      cache:{cacheLocation:'localStorage',storeAuthStateInCookie:true}
+    });
+    await msalInstance.initialize();
+    const response=await msalInstance.handleRedirectPromise();
+    if(response&&response.accessToken){document.getElementById('loginStatus').style.display='none';goStep(2);loadEmails();return;}
+    const accounts=msalInstance.getAllAccounts();
+    if(accounts.length>0){document.getElementById('loginStatus').style.display='none';goStep(2);loadEmails();return;}
+    document.getElementById('loginStatus').style.display='none';
+    document.getElementById('loginBtn').disabled=false;
+  }catch(e){
+    document.getElementById('loginStatus').style.display='none';
+    document.getElementById('loginError').style.display='block';
+    document.getElementById('loginError').textContent='Initialisatiefout: '+e.message;
+  }
+}
+
+async function loginMicrosoft(){
+  if(!msalInstance)return;
+  document.getElementById('loginBtn').disabled=true;
+  document.getElementById('loginError').style.display='none';
+  document.getElementById('loginStatus').style.display='flex';
+  document.getElementById('loginStatus').innerHTML='<div class="spinner"></div> Bezig met aanmelden...';
+  try{await msalInstance.loginRedirect({scopes:SCOPES});}
+  catch(e){
+    document.getElementById('loginStatus').style.display='none';
+    document.getElementById('loginBtn').disabled=false;
+    document.getElementById('loginError').style.display='block';
+    document.getElementById('loginError').textContent='Aanmelden mislukt: '+e.message;
+  }
+}
+
+async function getToken(){
+  const accounts=msalInstance.getAllAccounts();
+  if(!accounts.length)throw new Error('Niet ingelogd');
+  try{const r=await msalInstance.acquireTokenSilent({scopes:SCOPES,account:accounts[0]});return r.accessToken;}
+  catch(e){const r=await msalInstance.acquireTokenPopup({scopes:SCOPES,account:accounts[0]});return r.accessToken;}
+}
+
+async function loadBookingsData(token){
+  try{
+    // Rechtstreeks de Vormingen agenda ophalen via e-mailadres
+    bookingBusinessId = BOOKINGS_ADDRESS;
+    console.log('Bookings agenda:', BOOKINGS_ADDRESS);
+    // Alle services laden met paginering
+    bookingServices=[];
+    let svcUrl=`https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/${business.id}/services?$top=100`;
+    while(svcUrl){
+      const svcRes=await fetch(svcUrl,{headers:{'Authorization':`Bearer ${token}`}});
+      const svcData=await svcRes.json();
+      bookingServices=bookingServices.concat(svcData.value||[]);
+      svcUrl=svcData['@odata.nextLink']||null;
+    }
+    // Alle medewerkers laden met paginering
+    bookingStaff=[];
+    let staffUrl=`https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/${business.id}/staffMembers?$top=100`;
+    while(staffUrl){
+      const staffRes=await fetch(staffUrl,{headers:{'Authorization':`Bearer ${token}`}});
+      const staffData=await staffRes.json();
+      const filtered=(staffData.value||[]).filter(s=>!BLOCKED_STAFF.includes((s.displayName||'').toLowerCase()));
+      bookingStaff=bookingStaff.concat(filtered);
+      staffUrl=staffData['@odata.nextLink']||null;
+    }
+    console.log(`${bookingServices.length} services en ${bookingStaff.length} medewerkers geladen.`);
+  }catch(e){console.error('Bookings data laden mislukt:',e);}
+}
+
+// Match onderwerp én mailbody met service
+  function matchServiceFromMail(subject, body){
+    if(!bookingServices.length)return null;
+    const sub=(subject||'').toLowerCase().trim();
+    const bod=(body||'').toLowerCase().trim();
+
+    // Score berekenen per service
+    function scoreService(svc){
+      const name=svc.displayName.toLowerCase();
+      const words=name.split(/\s+/).filter(w=>w.length>2);
+      let score=0;
+      // Exacte match in onderwerp = hoogste prioriteit
+      if(sub===name)score+=100;
+      // Service naam zit volledig in onderwerp
+      if(sub.includes(name))score+=80;
+      // Onderwerp zit volledig in service naam
+      if(name.includes(sub))score+=60;
+      // Woorden van service matchen in onderwerp
+      const subMatches=words.filter(w=>sub.includes(w)).length;
+      score+=subMatches*20;
+      // Woorden van service matchen in mailbody (minder zwaar)
+      const bodMatches=words.filter(w=>bod.includes(w)).length;
+      score+=bodMatches*5;
+      // Extra punten als minstens helft van de woorden matchen in body
+      if(words.length>0&&bodMatches>=Math.ceil(words.length/2))score+=15;
+      return score;
+    }
+
+    // Bereken scores en kies de beste
+    let best=null,bestScore=0;
+    for(const svc of bookingServices){
+      const s=scoreService(svc);
+      if(s>bestScore){bestScore=s;best=svc;}
+    }
+    // Minimum score vereist om een match te accepteren
+    return bestScore>=5?best:null;
+  }
+
+  // Autocomplete services
+function filterServices(query){
+  const dd=document.getElementById('serviceDropdown');
+  const results=query.trim()===''?bookingServices:bookingServices.filter(s=>s.displayName.toLowerCase().includes(query.toLowerCase()));
+  if(!results.length){dd.style.display='none';return;}
+  dd.style.display='block';
+  dd.innerHTML=results.map(s=>`<div class="ac-item" onmousedown="selectService('${s.displayName.replace(/'/g,"\\'")}')">${s.displayName}</div>`).join('');
+}
+
+function selectService(name){
+  document.getElementById('serviceType').value=name;
+  document.getElementById('serviceDropdown').style.display='none';
+  // Duurtijd ophalen en eindtijd berekenen
+  const svc=bookingServices.find(s=>s.displayName===name);
+  if(svc&&svc.defaultDuration){
+    const mins=parseIsoDuration(svc.defaultDuration);
+    if(mins>0){
+      const start=document.getElementById('bookingTime').value||'08:00';
+      document.getElementById('bookingTime').value=start;
+      setEndTime(start,mins);
+    }
+  }
+  // Beschikbare medewerkers ophalen voor deze service
+  loadAvailableStaff(name);
+}
+
+// Autocomplete staff
+function filterStaff(query){
+  const dd=document.getElementById('staffDropdown');
+  const results=query.trim()===''?bookingStaff:bookingStaff.filter(s=>s.displayName.toLowerCase().includes(query.toLowerCase()));
+  if(!results.length){dd.style.display='none';return;}
+  dd.style.display='block';
+  dd.innerHTML='';
+  results.forEach(s=>{
+    const div=document.createElement('div');
+    div.className='ac-item';
+    div.textContent=s.displayName;
+    div.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      selectStaff(s.id,s.displayName);
+    });
+    dd.appendChild(div);
+  });
+}
+
+function handleStaffError(){
+  document.getElementById('staffStatus').textContent='Kies medewerker handmatig';
+  document.getElementById('staffStatus').style.color='#666';
+}
+
+function parseIsoDuration(iso){
+  const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  if(!m)return 0;
+  return(parseInt(m[1]||0)*60)+parseInt(m[2]||0);
+}
+
+function setEndTime(start,durationMins){
+  const parts=start.split(':');
+  const startM=parseInt(parts[0])*60+parseInt(parts[1]);
+  const endM=startM+durationMins;
+  const h=Math.floor(endM/60)%24;
+  const min=endM%60;
+  const endStr=`${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+  document.getElementById('bookingEndTime').value=endStr;
+  updateDurationDisplay(start,endStr);
+}
+
+function updateDurationDisplay(start,end){
+  try{
+    const sp=start.split(':'),ep=end.split(':');
+    const sm=parseInt(sp[0])*60+parseInt(sp[1]);
+    const em=parseInt(ep[0])*60+parseInt(ep[1]);
+    const diff=em-sm;
+    if(diff>0){
+      const h=Math.floor(diff/60),m=diff%60;
+      document.getElementById('durationDisplay').value=(h>0?h+'u':'')+(m>0?m+'min':'');
+    }
+  }catch(e){}
+}
+
+function onDateOrTimeChange(){
+  const start=document.getElementById('bookingTime').value;
+  const end=document.getElementById('bookingEndTime').value;
+  if(start&&end)updateDurationDisplay(start,end);
+  const svc=document.getElementById('serviceType').value;
+  if(svc)loadAvailableStaff(svc);
+}
+
+document.addEventListener('click',function(e){
+  ['serviceDropdown','staffDropdown'].forEach(id=>{
+    const dd=document.getElementById(id);
+    if(dd&&!dd.contains(e.target)&&e.target.id!==id.replace('Dropdown','Type')&&e.target.id!==id.replace('Dropdown','Member'))
+      dd.style.display='none';
+  });
+});
+
+async function loadEmails(){
+  document.getElementById('emailList').innerHTML='<div class="status-bar"><div class="spinner"></div> E-mails laden...</div>';
+  document.getElementById('emailError').style.display='none';
+  selectedEmail=null;
+  document.getElementById('analyzeBtn').disabled=true;
+  try{
+    const token=await getToken();
+    await loadBookingsData(token);
+    const res=await fetch('https://graph.microsoft.com/v1.0/me/messages?$top=15&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,bodyPreview',{headers:{'Authorization':`Bearer ${token}`}});
+    const data=await res.json();
+    if(!data.value||!data.value.length){document.getElementById('emailList').innerHTML='<p style="font-size:14px;color:#666">Geen e-mails gevonden.</p>';return;}
+    window._emails=data.value;
+    document.getElementById('emailList').innerHTML=data.value.map(m=>`
+      <div class="mail-item" id="mail-${m.id}" onclick="selectEmail('${m.id}',this)">
+        <div class="mail-from">${(m.from?.emailAddress?.name||m.from?.emailAddress?.address||'Onbekend').substring(0,60)}</div>
+        <div class="mail-subject">${(m.subject||'(geen onderwerp)').substring(0,80)}</div>
+        <div class="mail-date">${new Date(m.receivedDateTime).toLocaleString('nl-BE')}</div>
+      </div>`).join('');
+  }catch(e){
+    document.getElementById('emailList').innerHTML='';
+    document.getElementById('emailError').style.display='block';
+    document.getElementById('emailError').textContent='Fout bij laden: '+e.message;
+  }
+}
+
+function selectEmail(id,el){
+  document.querySelectorAll('.mail-item').forEach(m=>m.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedEmail=window._emails.find(m=>m.id===id);
+  document.getElementById('analyzeBtn').disabled=false;
+}
+
+function clearCustomerBadge(){document.getElementById('customerBadge').innerHTML='';}
+
+async function lookupOrCreateCustomer(token,name,email){
+  existingCustomerId=null;
+  if(!bookingBusinessId||!email)return{isExisting:false};
+  try{
+    const res=await fetch(`https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/${bookingBusinessId}/customers`,{headers:{'Authorization':`Bearer ${token}`}});
+    const data=await res.json();
+    const customers=data.value||[];
+    const found=customers.find(c=>c.emailAddress&&c.emailAddress.toLowerCase()===email.toLowerCase());
+    if(found){
+      existingCustomerId=found.id;
+      document.getElementById('customerBadge').innerHTML='<span class="badge badge-green">✓ Bestaande klant gevonden</span>';
+      return{
+        isExisting:true,
+        firstName:(found.displayName||'').split(' ')[0]||'',
+        lastName:(found.displayName||'').split(' ').slice(1).join(' ')||'',
+        email:found.emailAddress||'',
+        phone:found.phone||'',
+        address:found.addresses?.[0]?.street||''
+      };
+    }else{
+      const newRes=await fetch(`https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/${bookingBusinessId}/customers`,{
+        method:'POST',
+        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+        body:JSON.stringify({displayName:name,emailAddress:email})
+      });
+      const newC=await newRes.json();
+      existingCustomerId=newC.id||null;
+      document.getElementById('customerBadge').innerHTML='<span class="badge badge-blue">+ Nieuwe klant aangemaakt</span>';
+      return{isExisting:false};
+    }
+  }catch(e){console.error('Klant lookup mislukt:',e);return{isExisting:false};}
+}
+
+async function lookupBillitQuotation(customerName, customerEmail){
+  try {
+    document.getElementById('orderNumber').value = 'Bezig met zoeken in Billit...';
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const dateStr = threeMonthsAgo.toISOString().split('T')[0];
+    const baseDateFilter = `OrderType+eq+'Quotation'+and+OrderDirection+eq+'Income'+and+CreatedOn+ge+DateTime'${dateStr}T00:00:00'`;
+
+    async function searchBillit(extraFilter){
+      const url = `/api/billit/orders?$filter=${baseDateFilter}+and+${extraFilter}&$orderby=CreatedOn+desc&$top=1`;
+      const res = await fetch(url);
+      if(!res.ok) return null;
+      const data = await res.json();
+      const items = data.Items || data.value || data.items || [];
+      if(items.length > 0){
+        const quote = items[0];
+        return quote.Number || quote.DocumentNumber || quote.Reference || quote.number || null;
+      }
+      return null;
+    }
+
+    let foundNumber = null;
+
+    // 1. Zoek op e-mailadres
+    if(customerEmail && !foundNumber){
+      foundNumber = await searchBillit(`CounterParty/Email+eq+'${customerEmail}'`);
+    }
+
+    // 2. Zoek op bedrijfsnaam (volledige naam)
+    if(customerName && !foundNumber){
+      const escapedName = customerName.replace(/'/g, "''");
+      foundNumber = await searchBillit(`CounterParty/Name+eq+'${escapedName}'`);
+    }
+
+    // 3. Zoek op bedrijfsnaam (bevat naam)
+    if(customerName && !foundNumber){
+      const escapedName = customerName.replace(/'/g, "''");
+      foundNumber = await searchBillit(`substringof('${escapedName}',CounterParty/Name)+eq+true`);
+    }
+
+    // 4. Zoek op afzonderlijke woorden uit de naam (elk woord apart)
+    if(customerName && !foundNumber){
+      const words = customerName.split(' ').filter(w => w.length > 3);
+      for(const word of words){
+        if(foundNumber) break;
+        const escapedWord = word.replace(/'/g, "''");
+        foundNumber = await searchBillit(`substringof('${escapedWord}',CounterParty/Name)+eq+true`);
+      }
+    }
+
+    document.getElementById('orderNumber').value = foundNumber || 'NGO';
+
+  } catch(e){
+    console.error('Billit lookup mislukt:', e);
+    document.getElementById('orderNumber').value = 'NGO';
+  }
+}
+
+async function analyzeSelected(){
+  if(!selectedEmail)return;
+  document.getElementById('status2').style.display='flex';
+  document.getElementById('analyzeBtn').disabled=true;
+  try{
+    const token=await getToken();
+    const res=await fetch(`https://graph.microsoft.com/v1.0/me/messages/${selectedEmail.id}?$select=subject,from,body,receivedDateTime`,{headers:{'Authorization':`Bearer ${token}`}});
+    const mail=await res.json();
+    const bodyText=(mail.body?.content||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().substring(0,2000);
+    // Service matchen op onderwerp én mailinhoud
+    const subjectMatch=matchServiceFromMail(mail.subject, bodyText);
+    
+    const serviceNames=bookingServices.map(s=>s.displayName);
+    const serviceListStr=serviceNames.map((s,i)=>`${i+1}. ${s}`).join('\n');
+
+    const aiRes=await fetch('/api/analyze',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        messages:[{role:'user',content:`Analyseer deze e-mail en extraheer boekingsgegevens. Geef ALLEEN een JSON object terug, geen markdown of extra tekst.
+
+Van: ${mail.from?.emailAddress?.name} <${mail.from?.emailAddress?.address}>
+Onderwerp: ${mail.subject}
+Inhoud: ${bodyText}
+
+BESCHIKBARE SERVICES IN BOOKINGS (kies EXACT één van deze namen):
+${serviceListStr}
+
+JSON formaat:
+{"firstName":"","lastName":"","clientEmail":"","clientPhone":"","clientAddress":"","bookingDate":"","bookingTime":"","bookingEndTime":"","serviceType":"","location":"","contactPerson":"","orderNumber":"","participants":"","notes":""}
+
+Regels:
+- bookingDate=YYYY-MM-DD
+- bookingTime=HH:MM starttijd (leeg als niet vermeld in mail)
+- bookingEndTime=HH:MM eindtijd (leeg als niet vermeld in mail)
+- serviceType=VERPLICHT de EXACTE naam uit de bovenstaande lijst kiezen. Kijk EERST naar het onderwerp van de mail — dat is vrijwel altijd de naam van de service. Zoek de service die het beste overeenkomt met het onderwerp. Geef de volledige naam terug zoals die in de lijst staat, zonder aanpassingen.
+- clientEmail=e-mailadres afzender indien niet anders vermeld
+- Lege string als info niet gevonden`}]
+      })
+    });
+
+    const aiData=await aiRes.json();
+    if(aiData.error)throw new Error(aiData.error.message||'API fout');
+    let text=aiData.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(text);
+
+    // Klant opzoeken of aanmaken
+    const fullName=`${parsed.firstName||''} ${parsed.lastName||''}`.trim();
+    const emailAddr=parsed.clientEmail||mail.from?.emailAddress?.address||'';
+    const customerResult=await lookupOrCreateCustomer(token,fullName,emailAddr);
+
+    if(customerResult.isExisting){
+      document.getElementById('firstName').value=customerResult.firstName;
+      document.getElementById('lastName').value=customerResult.lastName;
+      document.getElementById('clientEmail').value=customerResult.email;
+      document.getElementById('clientPhone').value=customerResult.phone;
+      document.getElementById('clientAddress').value=customerResult.address;
+    }else{
+      document.getElementById('firstName').value=parsed.firstName||'';
+      document.getElementById('lastName').value=parsed.lastName||'';
+      document.getElementById('clientEmail').value=emailAddr;
+      document.getElementById('clientPhone').value=parsed.clientPhone||'';
+      document.getElementById('clientAddress').value=parsed.clientAddress||'';
+    }
+    // Locatie = zelfde als adres klant
+    document.getElementById('location').value=document.getElementById('clientAddress').value||'';
+
+    // Zoek offerte in Billit op basis van klantnaam en e-mailadres
+    const billitName = document.getElementById('firstName').value + ' ' + document.getElementById('lastName').value;
+    const billitEmail = document.getElementById('clientEmail').value || emailAddr;
+    lookupBillitQuotation(billitName.trim(), billitEmail);
+
+    document.getElementById('bookingDate').value=parsed.bookingDate||'';
+
+    document.getElementById('contactPerson').value=parsed.contactPerson||'';
+    document.getElementById('orderNumber').value=parsed.orderNumber||'';
+    document.getElementById('participants').value=parsed.participants||'';
+    document.getElementById('notes').value=parsed.notes?`PF - ${parsed.notes}`:'PF';
+
+    // Tijdstip: standaard 08:00-16:00 als niet in mail
+    const startTime=parsed.bookingTime&&parsed.bookingTime.trim()!==''?parsed.bookingTime:'08:00';
+    const endTime=parsed.bookingEndTime&&parsed.bookingEndTime.trim()!==''?parsed.bookingEndTime:'16:00';
+    document.getElementById('bookingTime').value=startTime;
+    document.getElementById('bookingEndTime').value=endTime;
+    updateDurationDisplay(startTime,endTime);
+
+    // Service selecteren: onderwerp heeft prioriteit, daarna AI
+    const finalService=subjectMatch||(parsed.serviceType?bookingServices.find(s=>s.displayName.toLowerCase()===parsed.serviceType.toLowerCase())||bookingServices.find(s=>s.displayName.toLowerCase().includes((parsed.serviceType||'').toLowerCase())):null);
+    if(finalService){
+      selectService(finalService.displayName);
+    }else if(parsed.serviceType){
+      document.getElementById('serviceType').value=parsed.serviceType;
+    }
+
+    document.getElementById('status2').style.display='none';
+    goStep(3);
+  }catch(e){
+    document.getElementById('status2').style.display='none';
+    document.getElementById('analyzeBtn').disabled=false;
+    alert('Fout bij analyseren: '+e.message);
+  }
+}
+
+function goConfirm(){
+  const required=['firstName','lastName','clientEmail','bookingDate','bookingTime','serviceType'];
+  for(const f of required){
+    if(!document.getElementById(f).value.trim()){alert('Vul minstens voornaam, achternaam, e-mail, datum, tijdstip en dienst in.');return;}
+  }
+  const d=document.getElementById('bookingDate').value;
+  const t=document.getElementById('bookingTime').value;
+  const dateStr=new Date(d+'T12:00:00').toLocaleDateString('nl-BE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const items=[
+    {label:'Naam',value:`${document.getElementById('firstName').value} ${document.getElementById('lastName').value}`},
+    {label:'E-mail klant',value:document.getElementById('clientEmail').value},
+    {label:'Datum',value:dateStr},
+    {label:'Starttijd',value:t},
+    {label:'Eindtijd',value:document.getElementById('bookingEndTime').value},
+    {label:'Dienst',value:document.getElementById('serviceType').value},
+    {label:'Locatie',value:document.getElementById('location').value||'—'},
+    {label:'Medewerker',value:document.getElementById('staffMember').value||'—'},
+  ];
+  const optional=[
+    {id:'clientPhone',label:'Telefoon klant'},{id:'clientAddress',label:'Adres klant'},
+    {id:'contactPerson',label:'Contactpersoon'},{id:'orderNumber',label:'Bestelbonnummer'},
+    {id:'participants',label:'Aantal deelnemers'},{id:'notes',label:'Opmerkingen'},
+  ];
+  optional.forEach(f=>{if(document.getElementById(f.id).value)items.push({label:f.label,value:document.getElementById(f.id).value});});
+  document.getElementById('summaryContent').innerHTML=items.map(({label,value})=>
+    `<div class="summary-cell${label==='Opmerkingen'||label==='Adres klant'?' full':''}"><div class="summary-label">${label}</div><div class="summary-value">${value}</div></div>`
+  ).join('');
+  document.getElementById('bookError').style.display='none';
+  document.getElementById('successMsg').style.display='none';
+  document.getElementById('confirmCard').style.display='block';
+  document.getElementById('bookBtn').disabled=false;
+  goStep(4);
+}
+
+async function bookAppointment(){
+  document.getElementById('bookBtn').disabled=true;
+  document.getElementById('status4').style.display='flex';
+  document.getElementById('bookError').style.display='none';
+  try{
+    const token=await getToken();
+    if(!bookingBusinessId){ bookingBusinessId = BOOKINGS_ADDRESS; }
+    if(!bookingBusinessId)throw new Error('Geen Bookings-bedrijf gevonden.');
+
+    const d=document.getElementById('bookingDate').value;
+    const t=document.getElementById('bookingTime').value;
+    const endT=document.getElementById('bookingEndTime').value||'16:00';
+    const startDT=new Date(`${d}T${t}:00`);
+    const endDT=new Date(`${d}T${endT}:00`);
+
+    const extraNotes=[
+      document.getElementById('contactPerson').value?`Contactpersoon: ${document.getElementById('contactPerson').value}`:'',
+      document.getElementById('orderNumber').value?`Bestelbonnummer: ${document.getElementById('orderNumber').value}`:'',
+      document.getElementById('participants').value?`Aantal deelnemers: ${document.getElementById('participants').value}`:'',
+      document.getElementById('notes').value?document.getElementById('notes').value:'',
+    ].filter(Boolean).join('\n');
+
+    const body={
+      customerName:`${document.getElementById('firstName').value} ${document.getElementById('lastName').value}`,
+      customerEmailAddress:document.getElementById('clientEmail').value,
+      customerPhone:document.getElementById('clientPhone').value||'',
+      customerAddress:{street:document.getElementById('clientAddress').value||''},
+      serviceNotes:extraNotes,
+      location:{displayName:document.getElementById('location').value||''},
+      start:{dateTime:startDT.toISOString(),timeZone:'Europe/Brussels'},
+      end:{dateTime:endDT.toISOString(),timeZone:'Europe/Brussels'},
+      serviceName:document.getElementById('serviceType').value,
+      appointmentStatus:'notConfirmed',
+      optionAppointmentLabel:'Voorstel',
+    };
+    if(existingCustomerId)body.customerId=existingCustomerId;
+    if(selectedStaffId)body.staffMemberIds=[selectedStaffId];
+
+    const apptRes=await fetch(`https://graph.microsoft.com/v1.0/solutions/bookingBusinesses/${bookingBusinessId}/appointments`,{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(apptRes.ok){
+      document.getElementById('status4').style.display='none';
+      document.getElementById('confirmCard').style.display='none';
+      document.getElementById('successMsg').style.display='block';
+    }else{
+      const err=await apptRes.json();
+      throw new Error(err.error?.message||'Onbekende fout');
+    }
+  }catch(e){
+    document.getElementById('status4').style.display='none';
+    document.getElementById('bookBtn').disabled=false;
+    document.getElementById('bookError').style.display='block';
+    document.getElementById('bookError').textContent='Fout: '+e.message;
+  }
+}
+
+window.addEventListener('load',initMsal);
+</script>
+</body>
+</html>
